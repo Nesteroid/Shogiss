@@ -148,10 +148,13 @@ class Board:
 					self.pieces_surf.blit(piece.image, pieces_surf_position)
 
 					if not self.game_ended and is_howered and self.mouse_clicked and (self.is_player_move == piece.is_player):
-						self.selected_piece = piece
-						self.selected_piece_moves = self.selected_piece.moves + self.selected_piece.pos
-						self.selected_piece_valid_moves = np.array(list(map(self.check_pos_is_valid, self.selected_piece_moves)))
-						self.highlighted_squares = self.selected_piece_moves[self.selected_piece_valid_moves]
+						if self.selected_piece == piece:
+							self.selected_piece = None # unselect
+						else:
+							self.selected_piece = piece
+							self.selected_piece_moves = self.selected_piece.moves + self.selected_piece.pos
+							self.selected_piece_valid_moves = np.array(list(map(self.check_pos_is_valid, self.selected_piece_moves)))
+							self.highlighted_squares = self.selected_piece_moves[self.selected_piece_valid_moves]
 
 		window.blit(self.pieces_surf, self.offset)
 		
