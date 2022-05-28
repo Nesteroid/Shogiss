@@ -1,17 +1,17 @@
 import pygame
 import random
 import numpy as np
-from copy import deepcopy
 from loguru import logger
-# from numba import njit
+from numba import njit
+from Scripts import ai, pieces
 
 
-# @njit(cache=True, fastmath=True)
+@njit(cache=True, fastmath=True)
 def arrays_are_equal(a: np.array, b: np.array):
 	return (np.equal(a, b)).all()
 
 
-class WindowInfo:
+class Layout:
 	def __init__(self, window):
 		self.window = window
 		self.update()
@@ -22,117 +22,6 @@ class WindowInfo:
 		self.center = self.size / 2
 		self.min_ = self.size.min()
 		self.max_ = self.size.max()
-
-
-class Piece:
-	MOVE_UP = np.array([0, -1])
-	MOVE_DOWN = np.array([0, 1])
-	MOVE_LEFT= np.array([-1, 0])
-	MOVE_RIGHT = np.array([1, 0])
-
-	ASSETS_PATH = "Assets/Default/"
-	
-	def __init__(self, pos, moves, image_names, is_player=True):
-		self.pos = pos
-		self.moves = moves
-		self.is_player = is_player
-
-		self.images = []
-		self.scaled_images = []
-
-		for name in image_names:
-			image = pygame.image.load(self.ASSETS_PATH + name)
-			self.images.append(image)
-			self.scaled_images.append(image)
-		
-		if not is_player: moves *= -1 # mirroring moves
-	
-	def __getattribute__(self, item):
-		if item == "image":
-			return self.scaled_images[self.is_player]
-		elif item == "value":
-			return np.sum(np.abs(self.moves))
-		return object.__getattribute__(self, item)
-	
-	def __repr__(self):
-		return self.__class__.__name__ + f" p={self.pos} v={self.value}"
-
-	def update_image_size(self, size):
-		self.scaled_images = []
-		for image in self.images:
-			scaled_image = pygame.transform.smoothscale(image, (int(size[0]), int(size[1])))
-			self.scaled_images.append(scaled_image)
-	
-	def switch_side(self):
-		self.is_player = not is_player
-		self.moves *= -1
-
-
-class Triangle(Piece):
-	def __init__(self, pos, is_player=True):
-		moves = np.array([
-			self.MOVE_UP,
-			# self.MOVE_UP + self.MOVE_LEFT,
-			# self.MOVE_UP + self.MOVE_RIGHT,
-		])
-		image_names = ("BlackLime.png", "WhiteLime.png")
-		super().__init__(pos, moves, image_names, is_player)
-
-
-class Diamond(Piece):
-	def __init__(self, pos, is_player=True):
-		moves = np.array([
-			self.MOVE_UP,
-			self.MOVE_LEFT,
-			self.MOVE_RIGHT,
-			self.MOVE_DOWN,
-		])
-		image_names = ("BlackYellowishOrange.png", "WhiteYellowishOrange.png")
-		super().__init__(pos, moves, image_names, is_player)
-
-
-class Square(Piece):
-	def __init__(self, pos, is_player=True):
-		moves = np.array([
-			self.MOVE_UP + self.MOVE_LEFT,
-			self.MOVE_UP + self.MOVE_RIGHT,
-			self.MOVE_DOWN + self.MOVE_LEFT,
-			self.MOVE_DOWN + self.MOVE_RIGHT,
-		])
-		image_names = ("BlackPink.png", "WhitePink.png")
-		super().__init__(pos, moves, image_names, is_player)
-
-
-class Circle(Piece):
-	def __init__(self, pos, is_player=True):
-		moves = np.array([
-			self.MOVE_UP,
-			self.MOVE_LEFT,
-			self.MOVE_RIGHT,
-			self.MOVE_DOWN,
-			self.MOVE_UP + self.MOVE_LEFT,
-			self.MOVE_UP + self.MOVE_RIGHT,
-			self.MOVE_DOWN + self.MOVE_LEFT,
-			self.MOVE_DOWN + self.MOVE_RIGHT,
-		])
-		image_names = ("BlackPurple.png", "WhitePurple.png")
-		super().__init__(pos, moves, image_names, is_player)
-
-
-class Octagon(Piece):
-	def __init__(self, pos, is_player=True):
-		moves = np.array([
-			self.MOVE_UP * 2,
-			self.MOVE_DOWN * 2,
-			self.MOVE_LEFT * 2,
-			self.MOVE_RIGHT * 2,
-			self.MOVE_UP + self.MOVE_LEFT,
-			self.MOVE_UP + self.MOVE_RIGHT,
-			self.MOVE_DOWN + self.MOVE_LEFT,
-			self.MOVE_DOWN + self.MOVE_RIGHT,
-		])
-		image_names = ("BlackViolet.png", "WhiteViolet.png")
-		super().__init__(pos, moves, image_names, is_player)
 
 
 class Board:
@@ -152,6 +41,7 @@ class Board:
 		self.is_player_move = True
 		self.game_ended = False
 		self.AI_enabled = True
+		self.AI = ai.SimpleAI(self)
 
 		self.reset()
 
@@ -186,187 +76,37 @@ class Board:
 				color = "gray20" if (i + j) % 2 else "gray60"
 				pygame.draw.rect(self.check_pattern_surf, color, (*pieces_surf_position, self.square_size, self.square_size), border_radius=self.square_border_radius)
 
-	def AI_make_move(self):
-		my_pieces = self.get_pieces(is_player=False)
-		random.shuffle(my_pieces)
-		
-		print(my_pieces)
-			
-		if random.random() <= self.difficulty:
-			if self.AI_try_trade(my_pieces): return
-			if self.AI_try_safe_eat_player(my_pieces): return
-			if self.AI_try_run_from_player(my_pieces): return
-			if (random.random() <= self.difficulty) and self.AI_try_safe_defended_attack_move(my_pieces): return
-			if random.random() >= 0.3 and self.AI_try_safe_defend_move(my_pieces): return
-			if self.AI_try_make_safe_move(my_pieces): return
-			if self.AI_try_eat_player(my_pieces): return
-			if self.AI_try_defended_attack_move(my_pieces): return
-			if self.AI_try_attack_move(my_pieces): return
-			if self.AI_try_defend_move(my_pieces): return
-		
-		self.AI_make_random_move(my_pieces)
-	
-	def AI_try_trade(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				target_piece = self.try_get_piece_by_pos(move)
-				if target_piece and target_piece.value >= piece.value:
-					max_killer_value = 0
-					for player_piece in self.get_pieces():
-						player_piece_legal_moves = self.get_piece_legal_moves(player_piece)
-						if ((piece.pos + move) == self.get_piece_legal_moves(player_piece)).all(1).any():
-							max_killer_value = max(max_killer_value, player_piece.value)
-					if (max_killer_value <= piece.value) and self.try_to_make_move(piece.pos, move):
-						return True
-		return False
-	
-	def AI_try_defended_attack_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				for player_piece in self.get_pieces():
-					if (player_piece.pos == self.get_piece_legal_moves(piece, move)).all(1).any():
-						other_pieces = list(filter(lambda other_piece: other_piece != piece, my_pieces))
-						random.shuffle(other_pieces)
-						for other_piece in other_pieces:
-							if ((piece.pos + move) == self.get_piece_legal_moves(other_piece)).all(1).any():
-								if self.try_to_make_move(piece.pos, move):
-									return True
-	
-	def AI_try_safe_defended_attack_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				for player_piece in self.get_pieces():
-					if (player_piece.pos == self.get_piece_legal_moves(piece, move)).all(1).any():
-						other_pieces = list(filter(lambda other_piece: other_piece != piece, my_pieces))
-						random.shuffle(other_pieces)
-						
-						if self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-							return True
-						continue
-						
-						for other_piece in other_pieces:
-							if ((piece.pos + move) == self.get_piece_legal_moves(other_piece)).all(1).any():
-								if self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-									return True
-	
-	def AI_try_attack_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				for player_piece in self.get_pieces():
-					if (player_piece.pos == self.get_piece_legal_moves(piece, move)).all(1).any():
-						if self.try_to_make_move(piece.pos, move):
-							return True
-	
-	def AI_try_defend_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				other_pieces = list(filter(lambda other_piece: other_piece != piece, my_pieces))
-				random.shuffle(other_pieces)
-				for other_piece in other_pieces:
-					if (other_piece.pos == self.get_piece_legal_moves(piece, move)).all(1).any():
-						if self.try_to_make_move(piece.pos, move):
-							return True
-		return False
-	
-	def AI_try_safe_defend_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				other_pieces = list(filter(lambda other_piece: other_piece != piece, my_pieces))
-				random.shuffle(other_pieces)
-				for other_piece in other_pieces:
-					if (other_piece.pos == self.get_piece_legal_moves(piece, move)).all(1).any():
-						if self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-							return True
-		return False
-
-	def AI_make_random_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			for move in piece_legal_moves:
-				if self.try_to_make_move(piece.pos, move):
-					return
-
-	def AI_try_run_from_player(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			for move in piece_legal_moves:
-				for player_piece in self.get_pieces():
-					player_piece_legal_moves = self.get_piece_legal_moves(player_piece)
-					if (piece.pos == player_piece_legal_moves).all(axis=1).any():
-						if self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-							return True
-		return False
-
-	def AI_try_eat_player(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			
-			for move in piece_legal_moves:
-				target_piece = self.try_get_piece_by_pos(move)
-				if target_piece and self.try_to_make_move(piece.pos, move):
-					return True
-		return False
-
-	def AI_try_safe_eat_player(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			
-			for move in piece_legal_moves:
-				target_piece = self.try_get_piece_by_pos(move)
-				if target_piece and self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-					return True
-		return False
-
-	def AI_try_make_safe_move(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			
-			for move in piece_legal_moves:
-				if self.AI_is_move_safe_check(move) and self.try_to_make_move(piece.pos, move):
-					return True
-		return False
-
-	
-	def AI_is_move_safe_check(self, move):
-		safe_from_all_player_pieces = True
-		for player_piece in self.get_pieces():
-			player_piece_legal_moves = self.get_piece_legal_moves(player_piece)
-			if (move == player_piece_legal_moves).all(axis=1).any():
-				safe_from_all_player_pieces = False
-		return safe_from_all_player_pieces
-
-	
-	def get_piece_legal_moves(self, piece, pos=None):
-		if pos is not None:
-			piece_moves = piece.moves + pos
+	def get_piece_legal_moves(self, piece, from_pos=None):
+		if from_pos is not None:
+			piece_moves = piece.moves + from_pos
 		else:
 			piece_moves = piece.moves + piece.pos
 		piece_legal_moves_filter = np.array(list(map(self.check_pos_is_valid, piece_moves)))
 		piece_legal_moves = piece_moves[piece_legal_moves_filter]
 		return piece_legal_moves
 
+	def is_move_safe_check(self, piece, move):
+		is_safe = True
+		for possible_killer in self.get_pieces(is_player=not piece.is_player):
+			possible_killer_legal_moves = self.get_piece_legal_moves(possible_killer)
+			if (move == possible_killer_legal_moves).all(axis=1).any():
+				is_safe = False
+		return is_safe
+
+	def get_safe_moves(self, piece, from_pos=None):
+		legal_moves = self.get_piece_legal_moves(piece, from_pos=from_pos)
+		safe_moves = []
+		for move in legal_moves:
+			if self.is_move_safe_check(piece, move):
+				safe_moves.append(move)
+		return np.array(safe_moves)
+
 	def get_pieces(self, is_player=True):
-		return list(filter(lambda piece: is_player == piece.is_player, self.pieces))
+		return np.array(list(filter(lambda piece: is_player == piece.is_player, self.pieces)))
 
 	def update(self, window):
 		if self.AI_enabled and not self.is_player_move:
-			self.AI_make_move()
+			self.AI.make_move()
 			self.is_player_move = True
 			if len(self.get_pieces(is_player=True)) == 0:
 				self.game_ended = True
@@ -423,16 +163,16 @@ class Board:
 	def reset_pieces(self):
 		self.pieces = list()
 		for column in range(self.squares):
-			self.add_mirrored_pieces(Triangle, np.array([column, self.squares-2]))
+			self.add_mirrored_pieces(pieces.Triangle, np.array([column, self.squares-2]))
 			
 			if column in (0, self.squares-1):
-				self.add_mirrored_pieces(Diamond, np.array([column, self.squares-1]))
+				self.add_mirrored_pieces(pieces.Square, np.array([column, self.squares-1]))
 			elif column in (1, self.squares-2):
-				self.add_mirrored_pieces(Square, np.array([column, self.squares-1]))
+				self.add_mirrored_pieces(pieces.Diamond, np.array([column, self.squares-1]))
 			elif column in (2, self.squares-3):
-				self.add_mirrored_pieces(Circle, np.array([column, self.squares-1]))
+				self.add_mirrored_pieces(pieces.Circle, np.array([column, self.squares-1]))
 			else:
-				self.add_mirrored_pieces(Octagon, np.array([column, self.squares-1]))
+				self.add_mirrored_pieces(pieces.Octagon, np.array([column, self.squares-1]))
 		
 	def add_mirrored_pieces(self, piece_class, pos):
 		player_piece = piece_class(pos, is_player=True)
@@ -459,26 +199,29 @@ class Board:
 			return True
 		return False
 
+	def get_last_rank(self, piece):
+		return (self.squares-1, 0)[piece.is_player]
+
 	def process_move(self, start_pos, end_pos):
 		selected_piece = self.try_get_piece_by_pos(start_pos)
 		target_piece = self.try_get_piece_by_pos(end_pos)
 		
 		selected_piece.pos = end_pos
 
-		reached_last_rank = ((end_pos[1] == self.squares-1), (end_pos[1] == 0))[selected_piece.is_player]
+		reached_last_rank = end_pos[1] == self.get_last_rank(selected_piece)
 
 		if target_piece: self.pieces.remove(target_piece)
 
 		if reached_last_rank:
-			if isinstance(selected_piece, Triangle):
+			if isinstance(selected_piece, pieces.Triangle):
 				self.pieces.remove(selected_piece)
-				self.pieces.append(Octagon(selected_piece.pos, selected_piece.is_player))
+				self.pieces.append(pieces.Octagon(selected_piece.pos, selected_piece.is_player))
 				self.pieces[-1].update_image_size([self.square_size]*2)
-			elif isinstance(selected_piece, Diamond) or isinstance(selected_piece, Square):
+			elif isinstance(selected_piece, pieces.Diamond) or isinstance(selected_piece, pieces.Square):
 				self.pieces.remove(selected_piece)
-				self.pieces.append(Circle(selected_piece.pos, selected_piece.is_player))
+				self.pieces.append(pieces.Circle(selected_piece.pos, selected_piece.is_player))
 				self.pieces[-1].update_image_size([self.square_size]*2)
-		elif isinstance(selected_piece, Triangle) and target_piece:
+		elif isinstance(selected_piece, pieces.Triangle) and target_piece:
 			self.pieces.remove(selected_piece)
 			self.pieces.append(target_piece.__class__(selected_piece.pos, selected_piece.is_player))
 			self.pieces[-1].update_image_size([self.square_size]*2)
@@ -493,7 +236,7 @@ class Board:
 		selected_piece = self.try_get_piece_by_pos(start_pos)
 		target_piece = self.try_get_piece_by_pos(end_pos)
 		
-		if not isinstance(selected_piece, Piece):
+		if not isinstance(selected_piece, pieces.Piece):
 			return False
 
 		if (target_piece is not None) and (selected_piece.is_player == target_piece.is_player):
@@ -503,17 +246,25 @@ class Board:
 
 
 class Game:
-	def __init__(self, two_players=False, board_size=7, difficulty="easy", caption="Board Game"):
+	def __init__(self, two_players=False, board_size=7, difficulty=1, caption="Board Game"):
 		pygame.font.init()
 		pygame.init()
 
 		self.window = pygame.display.set_mode((600, 600), pygame.RESIZABLE)
 		# window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.RESIZABLE)
 		
+		self.caption = caption
 		pygame.display.set_caption(caption)
+
+		try:
+			icon = pygame.image.load("shogiss.ico").convert_alpha()
+			icon.set_colorkey((0, 0, 0))
+			pygame.display.set_icon(icon)
+		except Exception as e:
+			pass
 		
 		self.clock = pygame.time.Clock()
-		self.win_info = WindowInfo(self.window)
+		self.win_info = Layout(self.window)
 
 		self.board = Board(self.win_info, board_size, difficulty)
 		self.board.AI_enabled = not two_players
@@ -528,14 +279,15 @@ class Game:
 			self.window.fill("gray40")
 			
 			if self.board.game_ended:
-				pass
-				# self.board.reset()
+				pygame.display.set_caption("PRESS ENTER TO RESTART")
+			
 			self.board.update(self.window)
 
 			pygame.display.update()
 			self.clock.tick(60)
 
-			pygame.display.set_caption(f"{int(self.clock.get_fps())}")
+			# DEBUG
+			# pygame.display.set_caption(f"{int(self.clock.get_fps())}")
 
 	def handle_events(self):
 		for event in pygame.event.get():
@@ -543,18 +295,22 @@ class Game:
 				pygame.quit()
 				self.run = False
 			elif event.type == pygame.VIDEORESIZE:
-				self.window = pygame.display.set_mode(event.size, pygame.FULLSCREEN)
+				self.window = pygame.display.set_mode(event.size, pygame.RESIZABLE)
 				self.win_info.update()
 				self.board.on_window_resize()
 			elif event.type == pygame.KEYUP:
 				if event.key == pygame.K_ESCAPE:
 					pygame.quit()
 					self.run = False
-			elif event.type == pygame.FINGERDOWN:
+				elif event.key == pygame.K_RETURN:
+					if self.board.game_ended:
+						pygame.display.set_caption(self.caption)
+						self.board.reset()
+			elif event.type in (pygame.FINGERDOWN, pygame.MOUSEBUTTONUP):
 				self.board.on_mouse_click()
 
 
-# logger.add("out.log", rotation="2 KB",  backtrace=True, diagnose=True)
+logger.add("error_log.txt", rotation="4 KB",  backtrace=True, diagnose=True)
 
 # [0 - 0.7] easy
 # (0.7 - 0.8] normal
@@ -565,7 +321,7 @@ def main():
 	game = Game(
 		two_players=False,
 		board_size=7,
-		difficulty=0.85
+		difficulty=1
 	)
 	game.run()
 
