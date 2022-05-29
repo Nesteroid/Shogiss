@@ -3,7 +3,11 @@ import numpy as np
 
 
 class SimpleAI:
-	'''safe endagered piece!'''
+	'''
+	if run fails, try to defend piece! (if valuable)
+	safe endagered piece!
+	run only with highest value piece!
+	'''
 	def __init__(self, board):
 		self.board = board
 
@@ -25,8 +29,6 @@ class SimpleAI:
 
 		if self.try_make_safe_move(my_pieces): return
 		
-		# if self.try_eat_player(my_pieces): return
-		
 		if (random.random() <= self.board.difficulty) and self.try_defended_attack_move(my_pieces): return
 
 		if self.try_trade_attack_move(my_pieces): return
@@ -42,7 +44,6 @@ class SimpleAI:
 			for move in safe_moves:
 				is_moving_forward = (piece.forward[1] > 0 and (move[1] - piece.pos[1]) > 0) or (piece.forward[1] < 0 and (move[1] - piece.pos[1]) < 0)
 				if is_moving_forward and self.board.try_to_make_move(piece.pos, move):
-					# print(piece.forward, move)
 					# print("try_make_safe_forward_move")
 					return True
 		return False
@@ -80,9 +81,6 @@ class SimpleAI:
 						random.shuffle(other_pieces)
 						for other_piece in other_pieces:
 							if ((piece.pos + move) == self.board.get_piece_legal_moves(other_piece)).all(1).any():
-								
-								# # print(piece, piece.pos + move, other_piece, self.board.get_piece_legal_moves(other_piece)) ##########
-								
 								if self.board.try_to_make_move(piece.pos, move):
 									# print("try_defended_attack_move")
 									return True
@@ -162,18 +160,6 @@ class SimpleAI:
 						if self.board.is_move_safe_check(piece, move) and self.board.try_to_make_move(piece.pos, move):
 							# print("try_run_from_player")
 							return True
-		return False
-
-	def try_eat_player(self, my_pieces):
-		for piece in my_pieces:
-			piece_legal_moves = self.board.get_piece_legal_moves(piece)
-			np.random.shuffle(piece_legal_moves)
-			
-			for move in piece_legal_moves:
-				target_piece = self.board.try_get_piece_by_pos(move)
-				if target_piece and self.board.try_to_make_move(piece.pos, move):
-					# print("try_eat_player")
-					return True
 		return False
 
 	def try_safe_eat_player(self, my_pieces):

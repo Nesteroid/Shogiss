@@ -2,6 +2,14 @@ import pygame
 import numpy as np
 import os, sys
 
+def pyinstaller_image_load(path, name):
+	if getattr(sys, 'frozen', False):
+		wd = sys._MEIPASS
+	else:
+		wd = ''    
+	return pygame.image.load(os.path.join(wd, path, name))
+
+
 class Piece:
 	MOVE_UP = np.array([0, -1])
 	MOVE_DOWN = np.array([0, 1])
@@ -19,12 +27,8 @@ class Piece:
 		self.scaled_images = []
 
 		for name in image_names:
-			try:
-				if getattr(sys, 'frozen', False):
-					wd = sys._MEIPASS
-				else:
-					wd = ''    
-				image = pygame.image.load(os.path.join(wd, self.ASSETS_PATH, name)).convert_alpha()
+			try:   
+				image = pyinstaller_image_load(self.ASSETS_PATH, name).convert_alpha()
 			except FileNotFoundError:
 				image = pygame.Surface((1, 1))
 				image.fill("magenta")
@@ -35,7 +39,7 @@ class Piece:
 		self.forward = np.array([0, -1])
 		if not is_player:
 			moves *= -1 # mirroring moves
-			self.forward *= -1
+			self.forward *= -1 # direction to last rank
 	
 	def __getattribute__(self, item):
 		if item == "image":
@@ -65,8 +69,8 @@ class Triangle(Piece):
 	def __init__(self, pos, is_player=True):
 		moves = np.array([
 			self.MOVE_UP,
-			# self.MOVE_UP + self.MOVE_LEFT,
-			# self.MOVE_UP + self.MOVE_RIGHT,
+			self.MOVE_DOWN + self.MOVE_LEFT,
+			self.MOVE_DOWN + self.MOVE_RIGHT,
 		])
 		image_names = ("BlackLime.png", "WhiteLime.png")
 		super().__init__(pos, moves, image_names, is_player)
@@ -115,19 +119,53 @@ class Circle(Piece):
 		super().__init__(pos, moves, image_names, is_player)
 
 
+class Hexagon(Piece):
+	def __init__(self, pos, is_player=True):
+		moves = np.array([
+			self.MOVE_UP*2 + self.MOVE_LEFT,
+			self.MOVE_UP*2 + self.MOVE_RIGHT,
+			self.MOVE_DOWN*2 + self.MOVE_LEFT,
+			self.MOVE_DOWN*2 + self.MOVE_RIGHT,
+			self.MOVE_LEFT*2,
+			self.MOVE_RIGHT*2,
+		])
+		image_names = ("BlackBlueLagoon.png", "WhiteBlueLagoon.png")
+		super().__init__(pos, moves, image_names, is_player)
+
+
 class Octagon(Piece):
 	def __init__(self, pos, is_player=True):
 		moves = np.array([
-			self.MOVE_UP * 2 + self.MOVE_LEFT,
-			self.MOVE_UP * 2 + self.MOVE_RIGHT,
-			self.MOVE_DOWN * 2 + self.MOVE_LEFT,
-			self.MOVE_DOWN * 2 + self.MOVE_RIGHT,
-			self.MOVE_LEFT * 2 + self.MOVE_UP,
-			self.MOVE_LEFT * 2 + self.MOVE_DOWN,
-			self.MOVE_RIGHT * 2 + self.MOVE_UP,
-			self.MOVE_RIGHT * 2 + self.MOVE_DOWN,
+			self.MOVE_UP*2,
+			self.MOVE_DOWN*2,
+			self.MOVE_LEFT*2,
+			self.MOVE_RIGHT*2,
+			self.MOVE_UP + self.MOVE_LEFT,
+			self.MOVE_UP + self.MOVE_RIGHT,
+			self.MOVE_DOWN + self.MOVE_LEFT,
+			self.MOVE_DOWN + self.MOVE_RIGHT,
 		])
 		image_names = ("BlackViolet.png", "WhiteViolet.png")
+		super().__init__(pos, moves, image_names, is_player)
+
+
+class Ring(Piece):
+	def __init__(self, pos, is_player=True):
+		moves = np.array([
+			self.MOVE_UP*2 + self.MOVE_RIGHT,
+			self.MOVE_UP*2 + self.MOVE_LEFT,
+			self.MOVE_UP*2,
+			self.MOVE_DOWN*2 + self.MOVE_RIGHT,
+			self.MOVE_DOWN*2 + self.MOVE_LEFT,
+			self.MOVE_DOWN*2,
+			self.MOVE_RIGHT*2,
+			self.MOVE_RIGHT*2 + self.MOVE_DOWN,
+			self.MOVE_RIGHT*2 + self.MOVE_UP,
+			self.MOVE_LEFT*2,
+			self.MOVE_LEFT*2 + self.MOVE_DOWN,
+			self.MOVE_LEFT*2 + self.MOVE_UP,
+		])
+		image_names = ("Black.png", "White.png")
 		super().__init__(pos, moves, image_names, is_player)
 
 if __name__ == "__main__":
