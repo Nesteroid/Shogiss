@@ -1,6 +1,7 @@
 from main import arrays_are_equal
 from scripts import pieces
 import numpy as np
+from copy import deepcopy
 
 
 class Board:
@@ -21,6 +22,7 @@ class Board:
 		self.reset()
 
 	def reset(self):
+		self.game_pieces_history = list()
 		self.winner = None
 		self.reset_pieces()
 
@@ -105,6 +107,8 @@ class Board:
 			else:
 				self.add_mirrored_pieces(pieces.Octagon, np.array([column, self.squares - 1]))
 
+		self.game_pieces_history.append(deepcopy(self.pieces))
+
 	def add_mirrored_pieces(self, piece_class, pos):
 		player_piece_pos = pos
 		enemy_piece_pos = np.array([self.squares - 1] * 2) - pos
@@ -142,6 +146,14 @@ class Board:
 	def get_last_rank(self, piece):
 		return (self.squares - 1, 0)[piece.is_player]
 
+	def undo(self, count=2):
+		if len(self.game_pieces_history) <= count:
+			return False
+		self.pieces = self.game_pieces_history[-count-1]
+		self.game_pieces_history = self.game_pieces_history[:-count-1:]
+		self.game_pieces_history.append(deepcopy(self.pieces))
+		return True
+
 	def process_move(self, start_pos, end_pos):
 		selected_piece = self.try_get_piece_by_pos(start_pos)
 		target_piece = self.try_get_piece_by_pos(end_pos)
@@ -157,6 +169,7 @@ class Board:
 		elif target_piece and target_piece.value > selected_piece.value:
 			self.pieces[end_pos[0]][end_pos[1]] = target_piece.__class__(end_pos, selected_piece.is_player)
 
+		self.game_pieces_history.append(deepcopy(self.pieces))
 		self.check_end_of_game()
 
 	def promote(self, piece):

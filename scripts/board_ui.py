@@ -133,7 +133,7 @@ class BoardUI(Layout):
 			self.tile_height = self.tile_width / 2 * 3 ** 0.5
 		self.board_size = self.tile_width * self.board.squares
 		self.square_border_radius = round(self.tile_width * 0.3)
-		self.offset = (self.size - self.board_size) // 2
+		self.offset = (self.size - self.board_size) / 2
 
 		self.render_surf = pygame.Surface([self.board_size]*2, pygame.SRCALPHA)
 

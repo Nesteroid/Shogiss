@@ -49,12 +49,15 @@ class Game:
 	MATCH_ENDED = 2
 
 	def __init__(self, two_players: bool = False, board_size: int = 8, difficulty: float = 1.0,
-				 caption: str = "Board Game"):
+				 caption: str = "Board Game", fps: int = 60):
 		pygame.init()
 		pygame.font.init()
 		pygame.mixer.init()
 
 		self.debug_font = pygame.font.SysFont('Comic Sans MS', 14)
+
+		self.mouse_hold_frames = 0
+		self.fps = fps
 
 		self.window = None
 		self.caption = caption
@@ -150,11 +153,11 @@ class Game:
 			pygame.display.update(self.boardUI.prev_updated_surfs)
 			pygame.display.update(self.boardUI.updated_surfs)
 
-			self.delta_time = self.clock.tick(60)
+			self.delta_time = self.clock.tick(self.fps)
 
 			if self.debug:
-				fps = self.clock.get_fps()
-				pygame.display.set_caption(f"DEBUG {int(fps)}")
+				real_fps = self.clock.get_fps()
+				pygame.display.set_caption(f"DEBUG {int(real_fps)}")
 				self.delta_time_history.append(self.delta_time)
 
 			self.frames += 1
@@ -169,6 +172,8 @@ class Game:
 				self.boardUI.resize(self.window.get_size())
 				self.window.fill(self.default_bg)
 				self.boardUI.updated_surfs.append(self.window.get_rect())
+			elif event.type == pygame.VIDEOEXPOSE:
+				self.boardUI.updated_surfs.append(self.window.get_rect())
 			elif event.type == pygame.KEYUP:
 				if event.key == pygame.K_ESCAPE:
 					if self.boardUI.move_in_process is None:
@@ -179,6 +184,10 @@ class Game:
 					if self.state == self.MATCH_ENDED:
 						pygame.mixer.music.unload()
 						self.restart()
+				elif event.key == pygame.K_r:
+					if self.boardUI.move_in_process is None:
+						if self.boardUI.board.undo():
+							self.boardUI.updated_surfs.append(self.window.get_rect())
 			elif event.type == pygame.MOUSEBUTTONDOWN:
 				self.boardUI.on_mouse_click(event)
 				if not self.menu_opened:
@@ -198,6 +207,15 @@ class Game:
 		elif keys[pygame.K_DOWN] and self.menu_opened:
 			self.boardUI.AI.difficulty -= 0.01
 			self.boardUI.AI.difficulty = max(self.boardUI.AI.difficulty, 0)
+
+		# Mouse holding
+		if pygame.mouse.get_pressed()[0]:
+			self.mouse_hold_frames += 1
+		elif self.mouse_hold_frames:  # mouse have been released
+			if self.mouse_hold_frames / self.fps >= 1.5:  # seconds
+				if self.boardUI.board.undo():
+					self.boardUI.updated_surfs.append(self.window.get_rect())
+			self.mouse_hold_frames = 0
 
 	def add_debug_text(self, text):
 		self.debug_texts.append(text)
@@ -254,6 +272,7 @@ def main():
 		two_players=False,
 		board_size=8,
 		difficulty=1,
+		fps=60,
 	)
 	# game.debug = True
 	game.run()
