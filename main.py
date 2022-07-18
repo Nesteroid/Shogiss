@@ -70,6 +70,7 @@ class Game:
 		self.debug = False
 
 		self.delta_time = 0
+		self.frames = 0
 
 		self.two_players = two_players
 		self.board_size = board_size
@@ -116,7 +117,8 @@ class Game:
 			if not self.running:
 				break
 
-			self.window.fill(self.default_bg)
+			if self.frames == 0:
+				self.window.fill(self.default_bg)
 
 			if self.board.winner is not None:
 				if self.state == self.MATCH_GOING:
@@ -135,13 +137,27 @@ class Game:
 
 			self._draw_debug_texts()
 
-			pygame.display.update()
+			if self.frames == 0:
+				pygame.display.update()
+
+			# pygame.display.update()
+
+			if self.debug:
+				for rect in self.boardUI.updated_surfs:
+					blink_color = self.frames % 256
+					pygame.draw.rect(self.window, (blink_color, 0, blink_color), rect, 1)
+
+			pygame.display.update(self.boardUI.prev_updated_surfs)
+			pygame.display.update(self.boardUI.updated_surfs)
+
 			self.delta_time = self.clock.tick(60)
 
 			if self.debug:
 				fps = self.clock.get_fps()
 				pygame.display.set_caption(f"DEBUG {int(fps)}")
 				self.delta_time_history.append(self.delta_time)
+
+			self.frames += 1
 
 	def handle_events(self):
 		for event in pygame.event.get():
@@ -151,6 +167,8 @@ class Game:
 			elif event.type == pygame.VIDEORESIZE:
 				self.window = pygame.display.set_mode(event.size, pygame.RESIZABLE)
 				self.boardUI.resize(self.window.get_size())
+				self.window.fill(self.default_bg)
+				self.boardUI.updated_surfs.append(self.window.get_rect())
 			elif event.type == pygame.KEYUP:
 				if event.key == pygame.K_ESCAPE:
 					if self.boardUI.move_in_process is None:
@@ -186,13 +204,16 @@ class Game:
 
 	def draw_multiple_lines(self, lines, font=None, color=(255, 255, 255), background='gray10', offset=pygame.math.Vector2()):
 		line_y_offset = 0
+		max_width = 0
 		for line in lines:
 			font = self.debug_font if font is None else font
 			text_surface = font.render(line, True, color)
 			text_surface_rect = text_surface.get_rect()
+			max_width = max(max_width, text_surface_rect.width)
 			pygame.draw.rect(self.window, background, text_surface_rect.move(0, line_y_offset).move(offset))
 			self.window.blit(text_surface, pygame.math.Vector2(0, line_y_offset) + offset)
 			line_y_offset += text_surface.get_height()
+		self.boardUI.updated_surfs.append(pygame.Rect(*offset, max_width, line_y_offset - offset.y))
 
 	def _draw_debug_texts(self, color=(255, 255, 255), background='gray10'):
 		if self.debug is False:

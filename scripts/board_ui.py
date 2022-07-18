@@ -58,10 +58,13 @@ class BoardUI(Layout):
 
 		self.setup_image_names()
 
-		self.assets_path = "assets\\fancy\\"
-		self.default_assets_path = "assets\\default\\"
+		self.assets_path = "assets/fancy/"
+		self.default_assets_path = "assets/default/"
 		self.piece_images = {"player": dict(), "enemy": dict()}
 		self.tile_images = {"square": list(), "hex": list()}
+
+		self.updated_surfs = []
+		self.prev_updated_surfs = []
 
 		super().__init__(size)
 
@@ -132,6 +135,8 @@ class BoardUI(Layout):
 		self.square_border_radius = round(self.tile_width * 0.3)
 		self.offset = (self.size - self.board_size) // 2
 
+		self.render_surf = pygame.Surface([self.board_size]*2, pygame.SRCALPHA)
+
 		self.update_piece_images()
 		self.update_tile_images()
 		self.update_board_image()
@@ -143,6 +148,11 @@ class BoardUI(Layout):
 				if not image:
 					image = main.pyinstaller_image_load(self.default_assets_path, image_name)
 				image.convert_alpha()
+				size = image.get_size()[0]
+				center = (round(size / 2),) * 2
+				color = "black" if "black" in image_name.lower() else "white"
+				pygame.draw.circle(image, color, center, size / 2, round(size / 32))
+				pygame.draw.circle(image, color, center, size / 6)
 				image = pygame.transform.smoothscale(image, [int(self.tile_width)] * 2)
 				self.piece_images[side][piece_class] = image
 
@@ -194,7 +204,8 @@ class BoardUI(Layout):
 			pygame.draw.rect(surf, color, rect)
 
 		if len(color) == 4:
-			surface.blit(surf, (self.tile_width * x, self.tile_width * y))
+			upd_rect = surface.blit(surf, (self.tile_width * x, self.tile_width * y))
+			self.updated_surfs.append(upd_rect.move(self.offset))
 
 	def render_hex_board_image(self):
 		for x in range(self.board.squares):
@@ -279,6 +290,9 @@ class BoardUI(Layout):
 		self.move_in_process = None
 		self.animation_percentage = 0
 
+		rect = pygame.Rect(*(self.offset + new_piece.pos*self.tile_width), self.tile_width, self.tile_height)
+		self.updated_surfs.append(rect)
+
 		if not self.is_player_move and (self.board.winner is None) and self.AI_enabled:
 			ai_move = self.AI.get_move()
 			self.animate_move(ai_move)
@@ -293,25 +307,36 @@ class BoardUI(Layout):
 			self.apply_move()
 
 	def draw(self, surface, centered=True, delta_time: float = 1.0):
-		render_surf = pygame.Surface(self.board_surf.get_size(), pygame.SRCALPHA)
-		render_surf.blit(self.board_surf, (0, 0))
+		# self.render_surf = pygame.Surface(self.board_surf.get_size(), pygame.SRCALPHA)
+		self.render_surf.blit(self.board_surf, (0, 0))
+
+		self.prev_updated_surfs = self.updated_surfs
+		self.updated_surfs = []
 
 		if not self.game.menu_opened:
-			self.render_highlighted_tiles(render_surf)
-		self.particle_system.emit(render_surf, self.size, delta_time / 1000, not self.game.menu_opened)
-		self.render_pieces(render_surf)
-		self.render_animated_piece(render_surf)
+			self.render_highlighted_tiles(self.render_surf)
 
-		surface.blit(render_surf, self.offset if centered else (0, 0))
+		rects = self.particle_system.emit(self.render_surf, self.size, delta_time / 1000, not self.game.menu_opened)
+		rects = map(lambda rect: rect.move(self.offset), rects)
+		self.updated_surfs.extend(rects)
+
+		self.render_pieces(self.render_surf)
+		self.render_animated_piece(self.render_surf)
+
+		surface.blit(self.render_surf, self.offset)
 
 		if self.game.menu_opened:
 			black_surf = pygame.Surface(self.board_surf.get_size())
 			black_surf.set_alpha(128)
-			surface.blit(black_surf, self.offset if centered else (0, 0))
+			surface.blit(black_surf, self.offset)
 
-			self.game.draw_multiple_lines(["ASSIST MODE", f"Difficulty: {round(self.AI.difficulty*100)}%"], font=None, color=(255, 255, 255), background='black')
+			self.game.add_debug_text("ASSIST MODE")
+			self.game.add_debug_text(f"Difficulty: {round(self.AI.difficulty * 100)}%")
 
 	def render_highlighted_tiles(self, render_surf):
+		if self.animation_piece is not None:
+			return
+
 		pieces_surf_mouse_pos = np.array(pygame.mouse.get_pos()) - self.offset
 
 		for i in range(self.board.squares):
@@ -329,10 +354,10 @@ class BoardUI(Layout):
 					if is_howered:
 						self.render_square(render_surf, (204, 214, 62, alpha), (i, j))
 					if is_reachable:
+						color = (214, 60, 60, alpha)
 						if self.selected_piece.is_player == self.is_player_move:
-							self.render_square(render_surf, (62, 214, 65, alpha), (i, j))
-						else:
-							self.render_square(render_surf, (214, 60, 60, alpha), (i, j))
+							color = (62, 214, 65, alpha)
+						self.render_square(render_surf, color, (i, j))
 
 	def render_pieces(self, render_surf):
 		for i in range(self.board.squares):
@@ -349,8 +374,8 @@ class BoardUI(Layout):
 			x = interpolate(self.move_in_process[0][0], self.move_in_process[1][0], self.animation_percentage)
 			y = interpolate(self.move_in_process[0][1], self.move_in_process[1][1], self.animation_percentage)
 			animation_image = self.get_piece_image(self.animation_piece)
-			render_surf.blit(animation_image, (x * self.tile_width, y * self.tile_height))
-
+			rect = render_surf.blit(animation_image, (x * self.tile_width, y * self.tile_height))
+			self.updated_surfs.append(rect.move(self.offset))
 			self.animation_create_particle()
 
 	def animation_create_particle(self):

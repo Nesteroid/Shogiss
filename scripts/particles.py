@@ -12,13 +12,16 @@ class ParticleSystem:
 		self.particles.append(data)
 
 	def emit(self, surface, living_area: list = None, delta_time: float = 1.0, update=True):
+		rects = []
 		if not self.particles:
-			return
+			return rects
 		for particle in self.particles:
-			pygame.draw.circle(surface, particle["color"], (particle["x"], particle["y"]), particle["r"])
+			rect = pygame.draw.circle(surface, particle["color"], (particle["x"], particle["y"]), particle["r"])
+			rects.append(rect)
 			if update:
 				self.update_particle(particle, delta_time)
 				self.remove_dead_particle(particle, living_area)
+		return rects
 
 	@staticmethod
 	def update_particle(particle, deltatime):
